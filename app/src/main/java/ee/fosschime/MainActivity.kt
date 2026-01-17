@@ -28,6 +28,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,6 +37,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -43,6 +46,7 @@ import ee.fosschime.ui.theme.FosschimeTheme
 
 import ee.fosschime.composables.AppHeader
 import java.util.Calendar
+import androidx.core.content.edit
 
 class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.S)
@@ -60,9 +64,15 @@ class MainActivity : ComponentActivity() {
                     OnOffToggle("Hourly chime", isChimeOn) { newValue ->
                         isChimeOn = newValue
                         alarmEveryHour(isChimeOn, overrideSilent)
+                        savePreferences("isOn", isChimeOn)
                     }
                     OnOffToggle("Override silent mode", overrideSilent) { newValue ->
                         overrideSilent = newValue
+                        alarmEveryHour(isChimeOn, overrideSilent)
+                        savePreferences("overrideSilent", overrideSilent)
+
+
+
                     }
                 }
             }
@@ -72,8 +82,15 @@ class MainActivity : ComponentActivity() {
 
 
 
+
+
+    @RequiresApi(Build.VERSION_CODES.S)
     @Composable
     fun OnOffToggle(description: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+        val activity = LocalContext.current
+        val sharedPref = activity.getSharedPreferences("Settings", Context.MODE_PRIVATE)
+
+
         val shape = RoundedCornerShape(32.dp)
         Row(
             modifier = Modifier
@@ -97,6 +114,7 @@ class MainActivity : ComponentActivity() {
 
             Switch(
                 checked = checked,
+                modifier = Modifier.testTag("mainToggles"),
                 onCheckedChange = {
                     onCheckedChange(it)
 
@@ -114,8 +132,16 @@ class MainActivity : ComponentActivity() {
                 }
             )
 
+            }
+        LaunchedEffect(true) {
+            val isOn = sharedPref!!.getBoolean("isOn", true)
+            val overrideSilent = sharedPref.getBoolean("overrideSilent", false)
+            alarmEveryHour(isOn, overrideSilent)
+
 
         }
+
+
     }
 
 
@@ -127,18 +153,33 @@ class MainActivity : ComponentActivity() {
         val context: Context = applicationContext
         AlarmReceiver.scheduleNextAlarm(context, isOn, overrideSilent)
 
+        
+
+
+    }
+
+    fun savePreferences(name: String, boolValue: Boolean?){
+        val activity = applicationContext
+        val sharedPref = activity.getSharedPreferences("Settings", Context.MODE_PRIVATE)
+
+        if(boolValue !== null) {
+            sharedPref.edit {
+                putBoolean(name, boolValue)
+            }
+        }
 
     }
 
 
 
+@RequiresApi(Build.VERSION_CODES.S)
 @Preview
 @Composable
 fun Preview(){
     Column {
         AppHeader(titleResId = R.string.app_name) { }
         OnOffToggle("Hourly chime", true){}
-        OnOffToggle("Override silent mode", true){}
+        OnOffToggle("Override silent mode", false){}
     }
 
 
