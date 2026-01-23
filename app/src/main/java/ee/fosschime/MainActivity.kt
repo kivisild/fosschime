@@ -1,5 +1,7 @@
 package ee.fosschime
 
+import android.Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+import android.annotation.SuppressLint
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -9,6 +11,7 @@ import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -84,6 +87,7 @@ class MainActivity : ComponentActivity() {
 
 
 
+    @SuppressLint("BatteryLife")
     @RequiresApi(Build.VERSION_CODES.S)
     @Composable
     fun OnOffToggle(description: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
@@ -114,7 +118,7 @@ class MainActivity : ComponentActivity() {
 
             Switch(
                 checked = checked,
-                modifier = Modifier.testTag("mainToggles"),
+                modifier = Modifier.testTag(description),
                 onCheckedChange = {
                     onCheckedChange(it)
 
@@ -134,6 +138,12 @@ class MainActivity : ComponentActivity() {
 
             }
         LaunchedEffect(true) {
+            val alarmManager = getSystemService(AlarmManager::class.java)
+            if (!alarmManager.canScheduleExactAlarms()){
+                startActivity((Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)))
+                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            }
+
             val isOn = sharedPref!!.getBoolean("isOn", true)
             val overrideSilent = sharedPref.getBoolean("overrideSilent", false)
             alarmEveryHour(isOn, overrideSilent)
@@ -204,12 +214,12 @@ class AlarmReceiver : BroadcastReceiver() {
             calendar.add(Calendar.HOUR_OF_DAY, 1)
             val timeTillNextAlarm = calendar.timeInMillis
 
-            if (isOn && alarmManager.canScheduleExactAlarms()) alarmManager.setExactAndAllowWhileIdle(
+            if (isOn && alarmManager?.canScheduleExactAlarms() == true) alarmManager.setExactAndAllowWhileIdle(
                 AlarmManager.RTC_WAKEUP,
                 timeTillNextAlarm,
                 pendingIntent
             )
-            else alarmManager.cancel(pendingIntent)
+            else alarmManager?.cancel(pendingIntent)
         }
     }
 
