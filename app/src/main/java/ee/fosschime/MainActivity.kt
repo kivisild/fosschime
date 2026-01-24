@@ -1,20 +1,25 @@
 package ee.fosschime
 
-import android.Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+import android.Manifest.permission.POST_NOTIFICATIONS
 import android.annotation.SuppressLint
 import android.app.AlarmManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -45,14 +50,19 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import ee.fosschime.ui.theme.FosschimeTheme
 
 import ee.fosschime.composables.AppHeader
 import java.util.Calendar
 import androidx.core.content.edit
+import java.time.LocalDateTime
+import kotlin.random.Random
 
 class MainActivity : ComponentActivity() {
-    @RequiresApi(Build.VERSION_CODES.S)
+
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -77,6 +87,9 @@ class MainActivity : ComponentActivity() {
 
 
                     }
+
+
+
                 }
             }
 
@@ -87,12 +100,12 @@ class MainActivity : ComponentActivity() {
 
 
 
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     @SuppressLint("BatteryLife")
-    @RequiresApi(Build.VERSION_CODES.S)
     @Composable
     fun OnOffToggle(description: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
         val activity = LocalContext.current
-        val sharedPref = activity.getSharedPreferences("Settings", Context.MODE_PRIVATE)
+        val sharedPref = activity.getSharedPreferences("Settings", MODE_PRIVATE)
 
 
         val shape = RoundedCornerShape(32.dp)
@@ -137,12 +150,26 @@ class MainActivity : ComponentActivity() {
             )
 
             }
+        val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){}
         LaunchedEffect(true) {
             val alarmManager = getSystemService(AlarmManager::class.java)
-            if (!alarmManager.canScheduleExactAlarms()){
+            if (ContextCompat.checkSelfPermission(applicationContext, POST_NOTIFICATIONS) == PackageManager.PERMISSION_DENIED && !sharedPref.getBoolean("notificationPermissionRequested", false)){
+                launcher.launch(POST_NOTIFICATIONS)
+                savePreferences("notificationPermissionRequested", true)
+            }
+
+            if (!alarmManager.canScheduleExactAlarms() && !sharedPref.getBoolean("alarmAndBatteryPermissionsRequested", false)){
+
+
                 startActivity((Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)))
                 startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                savePreferences("alarmAndBatteryPermissionsRequested", true)
+
+
+
             }
+
+
 
             val isOn = sharedPref!!.getBoolean("isOn", true)
             val overrideSilent = sharedPref.getBoolean("overrideSilent", false)
@@ -153,6 +180,7 @@ class MainActivity : ComponentActivity() {
 
 
     }
+
 
 
 
@@ -170,7 +198,7 @@ class MainActivity : ComponentActivity() {
 
     fun savePreferences(name: String, boolValue: Boolean?){
         val activity = applicationContext
-        val sharedPref = activity.getSharedPreferences("Settings", Context.MODE_PRIVATE)
+        val sharedPref = activity.getSharedPreferences("Settings", MODE_PRIVATE)
 
         if(boolValue !== null) {
             sharedPref.edit {
@@ -182,7 +210,8 @@ class MainActivity : ComponentActivity() {
 
 
 
-@RequiresApi(Build.VERSION_CODES.S)
+
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @Preview
 @Composable
 fun Preview(){
@@ -220,6 +249,8 @@ class AlarmReceiver : BroadcastReceiver() {
                 pendingIntent
             )
             else alarmManager?.cancel(pendingIntent)
+
+
         }
     }
 
@@ -231,6 +262,7 @@ class AlarmReceiver : BroadcastReceiver() {
         val mediaPlayer = MediaPlayer.create(context, R.raw.clock_chime_88027)
         val usage =
             if (isOverrideSilent) AudioAttributes.USAGE_ALARM else AudioAttributes.USAGE_MEDIA
+
         val attributes = AudioAttributes.Builder()
             .setUsage(usage)
             .build()
@@ -239,6 +271,8 @@ class AlarmReceiver : BroadcastReceiver() {
             setAudioAttributes(attributes)
             mediaPlayer.start()
         }
+
+        NotificationHandler(context).showSimpleNotification()
         scheduleNextAlarm(context, isOn, isOverrideSilent)
 
 
@@ -248,5 +282,36 @@ class AlarmReceiver : BroadcastReceiver() {
 
 }
 
+
+class NotificationHandler(private val context: Context) {
+    private val notificationManager = context.getSystemService(NotificationManager::class.java)
+    private val notificationChannelID = "hourlyNotificationID"
+
+    fun notificationChannel(){
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val name = "Hourly Chimes"
+            val description = "Hourly chime sounds"
+            val importance = NotificationManager.IMPORTANCE_DEFAULT
+            val channelId = "hourlyNotificationID"
+            val channel = NotificationChannel(channelId, name, importance)
+            val notificationManager: NotificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    fun showSimpleNotification() {
+        val channel = notificationChannel()
+        val notification = NotificationCompat.Builder(context, notificationChannelID)
+            .setContentTitle("Time is:")
+            .setContentText((LocalDateTime.now().toString()))
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setPriority(NotificationManager.IMPORTANCE_HIGH)
+            .setAutoCancel(true)
+            .build()  // finalizes the creation
+
+        notificationManager.notify(Random.nextInt(), notification)
+    }
+}
 
 
