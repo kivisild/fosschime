@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -65,15 +66,50 @@ class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         enableEdgeToEdge()
         setContent {
             FosschimeTheme {
 
-                var isChimeOn by remember {mutableStateOf(true)}
-                var overrideSilent by remember {mutableStateOf(false)}
+                val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){}
+                val activity = LocalContext.current
+                val sharedPref = activity.getSharedPreferences("Settings", MODE_PRIVATE)
+                val isOnPref = sharedPref.getBoolean("isOn", true)
+                val overrideSilentPref = sharedPref.getBoolean("overrideSilent", false)
+                LaunchedEffect(true) {
+
+                    val alarmManager = getSystemService(AlarmManager::class.java)
+                    if (ContextCompat.checkSelfPermission(applicationContext, POST_NOTIFICATIONS) == PackageManager.PERMISSION_DENIED && !sharedPref.getBoolean("notificationPermissionRequested", false)){
+                        launcher.launch(POST_NOTIFICATIONS)
+                        savePreferences("notificationPermissionRequested", true)
+                    }
+
+                    if (!alarmManager.canScheduleExactAlarms() && !sharedPref.getBoolean("alarmAndBatteryPermissionsRequested", false)){
+
+
+                        startActivity((Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)))
+                        startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                        savePreferences("alarmAndBatteryPermissionsRequested", true)
+
+
+
+                    }
+
+
+
+
+                    alarmEveryHour(isOnPref, overrideSilentPref)
+
+
+                }
+
+                var isChimeOn by remember {mutableStateOf(isOnPref)}
+                var overrideSilent by remember {mutableStateOf(overrideSilentPref)}
+
 
                 Column {
                     AppHeader(titleResId = R.string.app_name) { }
+                    ExampleButton()
                     OnOffToggle("Hourly chime", isChimeOn) { newValue ->
                         isChimeOn = newValue
                         alarmEveryHour(isChimeOn, overrideSilent)
@@ -87,6 +123,7 @@ class MainActivity : ComponentActivity() {
 
 
                     }
+
 
 
 
@@ -104,8 +141,8 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("BatteryLife")
     @Composable
     fun OnOffToggle(description: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-        val activity = LocalContext.current
-        val sharedPref = activity.getSharedPreferences("Settings", MODE_PRIVATE)
+
+
 
 
         val shape = RoundedCornerShape(32.dp)
@@ -150,35 +187,18 @@ class MainActivity : ComponentActivity() {
             )
 
             }
-        val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){}
-        LaunchedEffect(true) {
-            val alarmManager = getSystemService(AlarmManager::class.java)
-            if (ContextCompat.checkSelfPermission(applicationContext, POST_NOTIFICATIONS) == PackageManager.PERMISSION_DENIED && !sharedPref.getBoolean("notificationPermissionRequested", false)){
-                launcher.launch(POST_NOTIFICATIONS)
-                savePreferences("notificationPermissionRequested", true)
-            }
-
-            if (!alarmManager.canScheduleExactAlarms() && !sharedPref.getBoolean("alarmAndBatteryPermissionsRequested", false)){
-
-
-                startActivity((Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)))
-                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-                savePreferences("alarmAndBatteryPermissionsRequested", true)
 
 
 
-            }
 
-
-
-            val isOn = sharedPref!!.getBoolean("isOn", true)
-            val overrideSilent = sharedPref.getBoolean("overrideSilent", false)
-            alarmEveryHour(isOn, overrideSilent)
-
-
+    }
+    @RequiresApi(Build.VERSION_CODES.O)
+    @Composable
+    fun ExampleButton(){
+        val notificationHandler = NotificationHandler(LocalContext.current)
+        Column() {
+            Button(onClick = {notificationHandler.showSimpleNotification()}){Text(text="test")}
         }
-
-
     }
 
 
